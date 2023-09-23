@@ -1,20 +1,40 @@
 
 /*
-################################################################################
-#                                                                              #
-#                  M5StickC Production Switcher Simulator.                     #
-#                    Badly written by David R. Carroll.                        #
-#                      Creative Commons CC BY-NC 2023                          #
-#                        This is the Program Monitor sim.                      #
-#                          It recieves text commamnds from the panel.          #
-#                                                                              #
-################################################################################   
+###################################################################################
+#                                                                                 #
+#                M5StickC Production Switcher Simulator. v 1.0 Build 2345678      #
+#                  Badly written by David R. Carroll.                             #
+#                    Creative Commons CC BY-NC 2.0 2023                           #
+#                      This is the Program monitor sim.                           #
+#                        Preview is the same, just a use a different IP           #
+#                          It recieves text commamnds from the panel or Telnet.   #
+#                                                                                 #
+###################################################################################
+*/
+
+// How does this thing work?
+// We open a socket and listen for text messages.
+// These instructions are sent from the Python panel program but can be sent by any telnet client.
+// For example:
+// BKGD:1      // Set the Background bus to image 1 (Bars)
+// PST:4       // Set the PV (Preview) bus to image 4 (Canadian Flag)
+// TRANSTYPE:1 // Prepare to do a Wipe. 
+// TRANSWIPE:3 // Prepare to do a Star Wipe
+// MEAUTO:2    // Transition from PV to PGM in 1 second (60 frames) 
+//
+// Understanding this code and the panel program rely on some knowledge of how 
+// real switchers work and common TV broadcasting terms.
+// For more information, watch Broadcast News (1987), and excellent movie.
+// I don't reccomend buying a textbook. I did that once and it ruinned my life.
+
+
 
 #include <M5StickC.h>
 
 #include "Free_Fonts.h"
 
-These are the 160 x 80 images
+// These are the 160 x 80 images sent to the M5 LCD screen.
+// Each uint16_t word is one pixel in 565 format.
 #include "Wash1.h"
 #include "Bars.h"
 #include "Anna.h"
@@ -26,36 +46,48 @@ These are the 160 x 80 images
 #include "Dixie.h"
 #include "DVEGrid.h"
 
-This file defines a star shape.
+// This file defines the starwipe wipe's shape.
 #include "StarWipeHex.h"
 
 #include <WiFi.h>
-IPAddress ip(192, 168, 2, 240);
-IPAddress gateway(192, 168, 2, 0);
+
+// If you want to use a second (preview) M5StickC 
+// then make a copy of this program and assign a different IP to it.
+
+IPAddress ip(0, 0, 0, 0);
+IPAddress gateway(0, 0, 0, 0);
 IPAddress subnet(255, 255, 0, 0);
 
-const char *ssid = "Your WiFi SSID";
-const char *password = "Your Password";
+const char* ssid     = "Your WiFi name here";
+const char* password = "Your WiFi (and nothing else!) password here";
 
+// Use a different port if you like. Just match it in the panel.
 WiFiServer server(21);
 
+// This buffer contains the image that will be pushed to the M5 screen
 uint16_t LCD_Buffer[12800];
 const uint16_t *LCD_Pointer;
 
+// This points to the current key image .h file.
 const uint16_t *Key_Pointer;
 
+// Current BKGD (background) bus image
 uint16_t BKGD_Buffer[12800];
 const uint16_t *BKGD_Pointer;
 
+// Current PST (preset) bus image
 uint16_t PV_Buffer[12800];
 const uint16_t *PV_Pointer;
 
+// These pointers are passed to the various Dissolve / Wipe / DVE subs.
 const uint16_t *PST_Pointer;
 const uint16_t *Temp_Pointer;
 const uint16_t *From_Pointer;
 const uint16_t *To_Pointer;
 
 int16_t Wipe_Border = WHITE;
+
+// Globals. Too many Globals.
 
 int KeyBus;
 int BKGDBus;
@@ -71,6 +103,9 @@ float DVExPos;
 float DVEyPos;
 float DVEPersp;
 
+// About now you may be wondering how many naming conventions is he going to use?
+// Read on.
+
 int Mem_KeyBus;
 int Mem_BKGDBus;
 int Mem_PSTBus;
@@ -85,6 +120,9 @@ float Mem_DVExPos;
 float Mem_DVEyPos;
 float Mem_DVEPersp;
 
+// Finally, some (terrible) code!
+
+// Get the still pointer associated with requested panel button number.
 const uint16_t *GetStill(int Xpt) {
   const uint16_t *Return_Pointer;
   switch (Xpt) {
@@ -122,6 +160,7 @@ const uint16_t *GetStill(int Xpt) {
   return (Return_Pointer);
 }
 
+// This sets up the buffers based on the panel's next transition buttons (BKGD, KEY, BKGD + KEY)
 void SetTransition(int TransIncl, int KeyTally) {
   int x;
   for (x = 0; x < 12800; x++) {
@@ -144,6 +183,7 @@ void SetTransition(int TransIncl, int KeyTally) {
         To_Pointer = PV_Buffer;
       }
       break;
+
     case 2:  // KEY
       if (KeyTally == 0) {
         From_Pointer = PV_Buffer;
@@ -154,6 +194,7 @@ void SetTransition(int TransIncl, int KeyTally) {
         To_Pointer = PV_Buffer;
       }
       break;
+
     case 3:  // BKGD + KEY
       if (KeyTally == 0) {
         From_Pointer = PV_Buffer;
@@ -167,6 +208,7 @@ void SetTransition(int TransIncl, int KeyTally) {
   }
 }
 
+// This calls the correct subroutine based on the Transition Type and Dissolve, Wipe or DVE type selected on the panel. 
 void DoTransition(int gRate) {
   switch (TransType) {  // Auto Trans
     case 0:             //Dissolve
@@ -174,7 +216,7 @@ void DoTransition(int gRate) {
       break;
     case 1:  // Wipe
       if (TransWipe == 1) {
-        Wipe_SV(From_Pointer, To_Pointer, gRate);
+        Wipe_SplitH(From_Pointer, To_Pointer, gRate);
       }
       if (TransWipe == 2) {
         Wipe_Race(From_Pointer, To_Pointer, gRate);
@@ -208,11 +250,10 @@ void DoTransition(int gRate) {
   }
 }
 
+// This does a centered DVE wipe from 0 to 100%
 void DVE_Square(int g_Rate) {
   float Size;
   int x;
-  unsigned long myTime;
-  myTime = millis();
 
   for (Size = 0; Size < 101; Size = Size + g_Rate) {
     DVE(From_Pointer, To_Pointer, 0, 0, Size, 0);
@@ -225,12 +266,10 @@ void DVE_Square(int g_Rate) {
   M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
   LCD_Pointer = LCD_Buffer;
 
-  // Serial.print("                DVE_Square Duration=");
-  // Serial.println(millis() - myTime);
 }
 
+// This performs Effects Dissolve where a DVE starts and ends at arbitrary points and size.
 void Tween_DVE(int g_Rate) {
-  // Serial.print("Tween_DVE" );
 
   int x;
   float Tw_DVESize;
@@ -239,9 +278,6 @@ void Tween_DVE(int g_Rate) {
   float Tw_DVEPersp;
   float Interval;
   Interval = float(128 / g_Rate);
-
-  unsigned long myTime;
-  myTime = millis();
 
   Tw_DVESize = (Mem_DVESize - DVESize) / Interval;
   Tw_DVExPos = (Mem_DVExPos - DVExPos) / Interval;
@@ -263,18 +299,15 @@ void Tween_DVE(int g_Rate) {
   M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
   LCD_Pointer = LCD_Buffer;
 
-  // Serial.print("                Tween_DVE Duration=");
-  // Serial.println(millis() - myTime);
 }
 
-void Wipe_SV(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
+// Does a Split Horizontal wipe.
+void Wipe_SplitH(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
 
   int wipe_x;
   int wipe_y;
   int x;
   int y;
-  unsigned long myTime;
-  myTime = millis();
 
   for (x = 0; x < 12800; x++) {
     LCD_Buffer[x] = g_From[x];
@@ -301,17 +334,13 @@ void Wipe_SV(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
   LCD_Pointer = LCD_Buffer;
 
-  // Serial.print("                Wipe_SV Duration=");
-  // Serial.println(millis() - myTime);
 }
 
+// Yet another wipe. Just try it so see what it does.
 void Wipe_Race(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
 
   int x;
   int y;
-
-  unsigned long myTime;
-  myTime = millis();
 
   for (x = 0; x < 12800; x++) {
     LCD_Buffer[x] = g_From[x];
@@ -345,10 +374,9 @@ void Wipe_Race(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
   LCD_Pointer = LCD_Buffer;
 
-  // Serial.print("                Wipe_Race Duration=");
-  // Serial.println(millis() - myTime);
 }
 
+// Star Wipe This is more like a media wipe based on a pattern in StarWipeHex.h
 void StarWipe(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
 
   int cell;
@@ -357,9 +385,6 @@ void StarWipe(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   int z;
   unsigned int StarByte;
   unsigned int pixel;
-
-  unsigned long myTime;
-  myTime = millis();
 
   for (cell = 0; cell < 12; cell++) {  //6
     for (y = 0; y < 80; y++) {         //80
@@ -394,14 +419,11 @@ void StarWipe(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
   LCD_Pointer = LCD_Buffer;
 
-  // Serial.print("                StarWipe Duration=");
-  // Serial.println(millis() - myTime);
 }
 
+// The screen is divided into 8*4 squares and transitioned one by one.
 void Checkers(int g_Rate) {
   int x;
-  unsigned long myTime;
-  myTime = millis();
 
   for (x = 0; x < 12800; x++) {
     LCD_Buffer[x] = From_Pointer[x];
@@ -443,10 +465,9 @@ void Checkers(int g_Rate) {
 
   LCD_Pointer = LCD_Buffer;
 
-  // Serial.print("                Checkers Duration=");
-  // Serial.println(millis() - myTime);
 }
 
+// Used by Checkers() above
 void FillSquare(int xStart, int yStart, int g_Rate) {
   int x;
   int y;
@@ -468,14 +489,13 @@ void FillSquare(int xStart, int yStart, int g_Rate) {
   delay(32 / g_Rate);
 }
 
+// Simple Push Right DVE effect.
 void DVE_PushR(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
 
   int wipe_x;
   int wipe_y;
   int x;
   int y;
-  unsigned long myTime;
-  myTime = millis();
 
   for (wipe_x = 0; wipe_x <= 160; wipe_x++) {
     for (x = 0; x < wipe_x; x++) {
@@ -501,10 +521,10 @@ void DVE_PushR(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
     }
   }
   LCD_Pointer = LCD_Buffer;
-  // Serial.print("                DVE_PushR Duration=");
-  // Serial.println(millis() - myTime);
+  
 }
 
+// It dissolves! This needs to turn each 565 pixel into RGB and back to work.
 void Dissolve(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   float wipe_x;
   float FF = 0x100;
@@ -524,9 +544,6 @@ void Dissolve(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   int p_LCD_Green;
   int p_LCD_Blue;
   boolean Done;
-
-  unsigned long myTime;
-  myTime = millis();
 
   for (wipe_x = 2; wipe_x <= FF; wipe_x = wipe_x + g_Rate) {
     for (x = 0; x < 160; x++) {
@@ -549,8 +566,7 @@ void Dissolve(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
 
     M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
     LCD_Pointer = LCD_Buffer;
-
-    // delay(g_Rate);
+    
   }
   for (x = 0; x < 12800; x++) {
     LCD_Buffer[x] = g_To[x];
@@ -558,10 +574,10 @@ void Dissolve(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
   LCD_Pointer = LCD_Buffer;
 
-  // Serial.print("                Dissolve Duration=");
-  // Serial.println(millis() - myTime);
 }
 
+// This called to size and position an image. It is called by other effect subs that need it.
+// Pos_x and Pos_y = 0 is the center of the LCD screen. Size is 0 to 100 (%)  
 void DVE(const uint16_t g_From[], const uint16_t g_To[], float Pos_x, float Pos_y, float Size, float Pos_Persp) {
 
   float x_Pos;
@@ -576,9 +592,6 @@ void DVE(const uint16_t g_From[], const uint16_t g_To[], float Pos_x, float Pos_
 
   float x_Size;
   float y_Size;
-
-  unsigned long myTime;
-  myTime = millis();
 
   x_Size = 160 * Size / 100;
   y_Size = 80 * Size / 100;
@@ -616,10 +629,9 @@ void DVE(const uint16_t g_From[], const uint16_t g_To[], float Pos_x, float Pos_
     }
   }
 
-  // Serial.print("                DVE Duration=");
-  // Serial.println(millis() - myTime);
 }
 
+// If you're old enough to remember the Charlie's Angels TV show, you will know this effect.
 void DVE_Angels(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
 
   int x;
@@ -627,9 +639,6 @@ void DVE_Angels(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   int not_y;
   int z;
   int wipe_y;
-
-  unsigned long myTime;
-  myTime = millis();
 
   for (x = 0; x < 12800; x++) {
     LCD_Buffer[x] = g_From[x];
@@ -694,22 +703,17 @@ void DVE_Angels(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
   LCD_Pointer = LCD_Buffer;
 
-  // Serial.print("                DVE_Angels Duration=");
-  // Serial.println(millis() - myTime);
+  
 }
 
+// Push 1/4 of the image from left/right and up/down.
+// this fails in a pretty way if a DVE key is involved.
 void DVE_4Box(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
-
-  // void DVE(const uint16_t g_From[], const uint16_t g_To[], float Pos_x, float Pos_y, float Size, float Pos_Persp) {
-
 
   int x;
   int y;
   int Wipe;
   int notWipe;
-
-  unsigned long myTime;
-  myTime = millis();
 
   for (x = 0; x < 12800; x++) {
     PV_Buffer[x] = g_From[x];
@@ -757,15 +761,12 @@ void DVE_4Box(const uint16_t g_From[], const uint16_t g_To[], int g_Rate) {
   }
   M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
 
-  // Serial.print("                DVE_4Box Duration=");
-  // Serial.println(millis() - myTime);
 }
 
+// Squeeze the image from left and right side. No biggie.
 void DVE_SqueezeH(int g_Rate) {
   float Size;
   int x;
-  unsigned long myTime;
-  myTime = millis();
 
   for (Size = 100; Size >= 0; Size = Size - g_Rate) {
     DVE_SqH(To_Pointer, From_Pointer, Size);
@@ -778,11 +779,9 @@ void DVE_SqueezeH(int g_Rate) {
   M5.Lcd.drawBitmap(0, 0, 160, 80, LCD_Buffer);
   LCD_Pointer = LCD_Buffer;
 
-  // Serial.print("                DVE_SqueezeH Duration=");
-  // Serial.println(millis() - myTime);
 }
 
-
+// Sub used by DVE_SqueezeH()
 void DVE_SqH(const uint16_t g_From[], const uint16_t g_To[], float Size) {
 
   float x_Pos;
@@ -825,8 +824,9 @@ void DVE_SqH(const uint16_t g_From[], const uint16_t g_To[], float Size) {
   }
 }
 
+// Mostly standard stuff.
 void setup(void) {
-  // Start serial communication for debugging purposes
+  
   Serial.begin(115200);
   delay(2000);
 
@@ -836,16 +836,14 @@ void setup(void) {
 
   M5.Lcd.setRotation(3);
   M5.Lcd.setTextColor(TFT_WHITE);
-  //dtostrf("Dave TV", 4 , 1, chBuffer);
   M5.Lcd.setFreeFont(FMB9);
 }
 
+
 void loop(void) {
-  int x;
-  int y;
-  int incomingByte = 0;
-  char c;
-  //String Line = "";
+  // int x;
+  // int y;
+  char c; 
   bool New_Command = false;
 
   String R_Command = "";
@@ -854,13 +852,13 @@ void loop(void) {
   String Parameter = "";
   int intParameter;
 
-  x = StarWipe_bits[3][241];
+  // x = StarWipe_bits[3][241];
 
   if (WiFi.status() != WL_CONNECTED) {
     Serial.print("Not Connected to: ");
     Serial.println(WiFi.localIP());
 
-    WiFi.begin(ssid, password);
+    WiFi.begin(ssid, password);  
     WiFi.config(ip, gateway, subnet);
 
     while (WiFi.status() != WL_CONNECTED) {
@@ -873,40 +871,47 @@ void loop(void) {
   }
   server.begin();
 
-  WiFiClient client = server.available();  // listen for incoming clients
+  WiFiClient client = server.available();
 
-  if (client) {  // if you get a client,
+  if (client) {  // Connected to the panel or telnet.
     while (client.connected()) {
-      if (client.available()) {  // if there's bytes to read from the client,
-        c = client.read();
-        Serial.print(c);
+
+      if (client.available()) { // Start reading in a panel command.  
+        c = client.read(); 
+        Serial.print(c); // Print the characters as we get them.
 
         if (c == '\r') {
-          c = client.read();  //read the LF(10)
-          New_Command = true;
+          c = client.read();  //skip the LF(10)
+          New_Command = true; // We have something to parse.
           Serial.println();
         } else {
           R_Command += c;
         }
 
+        // Parse the panel message that's in this format COMMAND:parameter (a single number)
         if (New_Command) {
-          // Serial.println();
-
           Pos = R_Command.indexOf(":");
+
           if (Pos > 0) {
             Command = R_Command.substring(0, Pos);
             Parameter = R_Command.substring(Pos + 1);
             intParameter = Parameter.toInt();
+
           } else {
+
             Serial.println("Bad Command");
           }
 
+          // Set up variables based on the command and intParameter.
+          // Only a few of these change the LCD screen right away.
+
+          // A button was pressed on the Key bus.
           if (Command == "KEY") {
             KeyBus = intParameter;
             Key_Pointer = GetStill(intParameter);
+
+            // The Key DVE is on-air so update the LCD.
             if (KeyTally == 1) {
-              // Serial.print("DVExPos=");
-              // Serial.println(DVExPos);
               DVE(BKGD_Pointer, Key_Pointer, DVExPos, DVEyPos, DVESize, DVEPersp);
               PV_Pointer = PV_Buffer;
               M5.Lcd.drawBitmap(0, 0, 160, 80, PV_Pointer);
@@ -914,13 +919,17 @@ void loop(void) {
             }
           }
 
-          if (Command == "BKGD") {
+
+          if (Command == "BKGD") { // A button was pressed on the Background bus.
             BKGDBus = intParameter;
             BKGD_Pointer = GetStill(intParameter);
-            if (KeyTally == 0) {
+
+            
+            if (KeyTally == 0) { // Update the LCD with the just the image
               M5.Lcd.drawBitmap(0, 0, 160, 80, BKGD_Pointer);
               LCD_Pointer = BKGD_Pointer;
-            } else {
+
+            } else { // Update the LCD with the image and the Key DVE.
               DVE(BKGD_Pointer, Key_Pointer, DVExPos, DVEyPos, DVESize, DVEPersp);
               PV_Pointer = PV_Buffer;
               M5.Lcd.drawBitmap(0, 0, 160, 80, PV_Pointer);
@@ -928,21 +937,22 @@ void loop(void) {
             }
           }
 
-          if (Command == "PST") {
+          if (Command == "PST") { // Just update the PSTbus for future use.
             PSTBus = intParameter;
             PST_Pointer = GetStill(intParameter);
           }
 
-          if (Command == "MEAUTO") {
+          if (Command == "MEAUTO") { // Do the transition with all the parameters recieved so far.
             SetTransition(TransIncl, KeyTally);
 
             DoTransition(intParameter);
           }
 
-          if (Command == "MECUT") {
+          if (Command == "MECUT") { // Swap the BKGD and PST buffers and display the new program image.
             SetTransition(TransIncl, KeyTally);
             M5.Lcd.drawBitmap(0, 0, 160, 80, To_Pointer);
             LCD_Pointer = To_Pointer;
+
             if (TransIncl == 1 || TransIncl == 3) {
               Temp_Pointer = BKGD_Pointer;
               BKGD_Pointer = PST_Pointer;
@@ -950,7 +960,7 @@ void loop(void) {
             }
           }
 
-          if (Command == "PGM_RECALL") {
+          if (Command == "PGM_RECALL") { // Copy all then Mem_ commands/parameters recieved into current parameters 
             Key_Pointer = GetStill(Mem_KeyBus);
             BKGD_Pointer = GetStill(Mem_BKGDBus);
             PST_Pointer = GetStill(Mem_PSTBus);
@@ -965,14 +975,16 @@ void loop(void) {
             DVEyPos = Mem_DVEyPos;
             DVEPersp = Mem_DVEPersp;
 
-            if (KeyTally == 0) {
+            if (KeyTally == 0) {  // Cut with memory parameters.
               From_Pointer = PV_Buffer;
               To_Pointer = BKGD_Pointer;
-            } else {
+              
+            } else { // Cut and add the DVE Key. 
               DVE(BKGD_Pointer, Key_Pointer, DVExPos, DVEyPos, DVESize, DVEPersp);
               From_Pointer = BKGD_Pointer;
               To_Pointer = PV_Buffer;
             }
+
             M5.Lcd.drawBitmap(0, 0, 160, 80, To_Pointer);
             LCD_Pointer = To_Pointer;
             KeyBus = Mem_KeyBus;
@@ -980,9 +992,13 @@ void loop(void) {
             PSTBus = Mem_PSTBus;
           }
 
+          // This why we use Mem_ parameters. 
+          // We need to "tween" between the existing and the Mem_ values. 
           if (Command == "EFF_RECALL") {
+
             if (Mem_KeyBus == KeyBus && Mem_BKGDBus == BKGDBus && Mem_KeyTally == 1 && KeyTally == 1) {
               Tween_DVE(intParameter);
+
             } else {
               Key_Pointer = GetStill(Mem_KeyBus);
               PST_Pointer = GetStill(Mem_BKGDBus);
@@ -998,6 +1014,7 @@ void loop(void) {
               if (KeyTally == 0) {
                 From_Pointer = LCD_Pointer;
                 To_Pointer = PST_Pointer;
+
               } else {
                 DVE(PST_Pointer, Key_Pointer, DVExPos, DVEyPos, DVESize, DVEPersp);
                 From_Pointer = LCD_Pointer;
@@ -1010,6 +1027,7 @@ void loop(void) {
             PSTBus = Mem_PSTBus;
           }
 
+          // All of these ifs just copy revieved parameters into variables. Yawn...
           if (Command == "TRANSINCL") {
             TransIncl = intParameter;
           }
@@ -1082,28 +1100,23 @@ void loop(void) {
             Mem_DVEPersp = float(intParameter);
           }
 
-          /*
-                  Serial.print("DVExPos=");
-                  Serial.print(DVExPos);
-                  Serial.print(", DVEyPos=");
-                  Serial.print(DVEyPos);
-                  Serial.print(", DVESIZE=");
-                  Serial.println(DVESize);
-               */
-
-          R_Command = "";
+          // Clear this message and get ready for the next one.
+          R_Command = ""; 
           New_Command = false;
         }
       }
     }
 
+    // Take a break you deserve it.
     delay(100);
 
+  // Can't connect to the panel (or Telnet) so display that on the M5StickC Screen.
   } else {
     // M5.Lcd.fillScreen(TFT_DARKCYAN);
     M5.Lcd.drawString("Not connected", 5, 25, GFXFF);
     M5.Lcd.drawString("to panel", 5, 40, GFXFF);
   }
 
+  // You don't deserve this break but you get it anyway.
   delay(200);
 }
