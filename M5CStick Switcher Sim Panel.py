@@ -10,11 +10,11 @@ import time
 #                                                                              #
 #                  M5StickC Production Switcher Simulator.                     #
 #                    Badly written by David R. Carroll.                        #
-#                      Creative Commons C BY-NC 2023                           #
+#                      Creative Commons CC BY-NC 2023                          #
 #                        This is the switcher panel.                           #
 #                          It sends text commamnds to two M5StickC             #
-#                            IoT development boards, that act as               #
-#                              Profgram and preview monitors.                  #
+#                            IoT development boards that act as                #
+#                              Program and Preview monitors.                   #
 #                                                                              #
 ################################################################################   
 
