@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+# from tkinter import ttk
 from tkmacosx import Button
 from tkmacosx import Marquee
 import tkinter.font as font
@@ -13,31 +13,38 @@ import time
 #                      Creative Commons CC BY-NC 2023                          #
 #                        This is the switcher panel.                           #
 #                          It sends text commamnds to two M5StickC             #
-#                            IoT development boards that act as                #
+#                            IoT development boards, that act as               #
 #                              Program and Preview monitors.                   #
 #                                                                              #
 ################################################################################   
 
+# This version uses tkmacosx, a Mac only library for Button and Marquee.
+# # You can substitute tkinter button. Marquee can be replaced by an ugly tkinter text widget. 
+
+
 
 # Comment this out if you want to run the panel without M5StickC's running.
-# Change the IPs to match the M5Stick C code.
+# See def send( and def sendPRV( subs too.
 
 # """
+
 tn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 tn.settimeout(5)
 print()
 print("Connecting to M5StickC PGM")
-tn.connect(('192.168.2.240',21))
+# Change the IP/Port to match the M5Stick C code.
+tn.connect(('0.0.0.0',21))
 
 tn_PRV = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 tn_PRV.settimeout(5)
 print()
 print("Connecting to M5StickC PRV")
-tn_PRV.connect(('192.168.2.250',21))
+# Change the IP/Port to match the M5Stick C code.
+tn_PRV.connect(('0.0.0.0',21))
+
 # """
 
-
-# root window
+# Create the root window that contains all the other widgets.
 root = tk.Tk()
 root.geometry('1000x500+400+100')
 root.configure(background='#444')
@@ -45,36 +52,45 @@ root.resizable(False, False)
 root.title('Switcher')
 
 
+# Lots of fonts. Some are actually used.
+# Windows users, try Helvetica if you don't have Arial.
 PushButtonFont = font.Font(family="Arial Black",size=26,)
 MemoryButtonFont = font.Font(family="Arial",size=26,)
 ButtonFont = font.Font(family="Arial", size=16)
 Mnemonic_Font = font.Font(family="Arial", size=14)
-ListBox_Font = font.Font(family="Arial", size=18)
+# ListBox_Font = font.Font(family="Arial", size=18)
 panelMenuFont=font.Font(family="Courier New", size=18)
 keyType_Font = font.Font(family="Arial", size=12)
 
 panelButtonFont=font.Font(family="Zapf Dingbats", size=26)
 
-PGM_FG="white"
-PGM_GLOW = "blue"
-SELECT_BUTTON_BG = "#59F"
-BTN_FG="#111"
-MNM_FG = "#8F8"
-LBL_FG="#DDD"
-LBL_BG ="#222"
+# Various colors used by buttons.
+PGM_FG="white" # Button labels.
+PGM_GLOW = "blue" # Default button background.
+SELECT_BUTTON_BG = "#59F" # Very light green. Selected button backgound.
+# BTN_FG="#111" # Very dark grey.
+MNM_FG = "#8F8" # Light green. Mnemonic text.
+LBL_FG="#DDD" # Grey. Label text.
+LBL_BG ="#222" # Very dark grey. Label background.
+Menu_FG = "#3F3" # Light green.
+Menu_BG = "#33f" # Navy blue.
 
-#ttk.Style().configure("TreeStyle", foreground=LBL_BG, background="white")
+switcherVersion = "M5 Switcher v1.0\n "
 
+# Number of Buttons
 PGM_Buttons = 9
 MEM_Buttons = 9
+
+# start position and spacing of buttons. The Key bus, other buttons and memonics are relative to this.
 PGM_Top = 200
 PGM_Left = 20
 PGM_x_Spacing = 60
-PGM_y_Spacing = 50
 
+# Memory buttons start position.
 MEM_Top = 50
 MEM_Left = 20
 
+#Create lists for all buttons.
 KEY_button = [0] * PGM_Buttons 
 MNM_label = [0] * PGM_Buttons 
 PGM_button = [0] * PGM_Buttons
@@ -87,10 +103,13 @@ storeInclButton = [0] * 2
 transInclButton = [0] * 2
 panelMenuButton = [0] * 8
 keyTypeButton = [0] * 3
+
+# This list contains the stored memories
 memories = [[0],[0]]
 for x in range(10):
     memories.insert(0,[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
 
+# Keep track of what buttons are pressed.
 Current_KEY_Button = 0
 Current_PGM_Button = 0
 Current_PST_Button = 0
@@ -100,15 +119,15 @@ Current_TransIncl = 0
 Current_TransType = 0
 Current_TransKey = 0
 Current_TransBkgd = 1
+Current_TransIncl = 1 # 1 BKGD 2 KEY 3 BKGD+KEY
 Current_KeyTally = 0
 Current_PE_Button = 0
 lastButtonPressed = -1
 DVEXPOS = 0
 DVEYPOS = 0
-switcherVersion = "M5 Switcher v1.0\n "
 
-Current_TransIncl = 1 # 1 BKGD 2 KEY 3 BKGD+KEY
-
+# These lists are used in the panel menu Marquee box.
+# The first row is displayed, the second is sent to the M5StickCs 
 TransRate = [['0', '30', '60', '120', '240'], ['0', '8', '4', '2', '1']]
 Current_TransRate = 2
 
@@ -126,6 +145,8 @@ Current_DVEKeyPersp = 3
 
 #******************************************************************  Functions  ************************** 
 
+# This figures out what to send to the Preview M5StickC
+# based on what Current_TransIncl, Current_KeyTally, Current PST and PGM Buttons are. 
 def setPRV():
     global Current_PGM_Button
     global Current_PST_Button
@@ -170,12 +191,14 @@ def setPRV():
     pass
 
 def send(command):
+    # Comment this line out if you want to run the panel without M5StickC's running.
     tn.send(command.encode('ascii') + b"\r\n")
     print("PGM " + command)
 
     pass
 
 def sendPRV(command):
+    # Comment this line out if you want to run the panel without M5StickC's running.
     tn_PRV.send(command.encode('ascii') + b"\r\n")
     print("PRV " + command)
 
@@ -183,11 +206,13 @@ def sendPRV(command):
 
 #******************************************************************  Define panel   ************************** 
 
+# Key type select row. Only DVE is implemented in this version.
 keyTypeText = ('SELF', 'CK', 'DVE')
 for i in range (3):
     keyTypeButton[i] = Button(root,font=keyType_Font,text = keyTypeText[i],borderless="true",fg=PGM_FG,bg=PGM_GLOW,height=40,width=40,command=lambda Current_KeyType=i: KeyTypePress(Current_KeyType))
     keyTypeButton[i].place(x = 27 + i * PGM_x_Spacing, y = 155)
     
+# Draw the Key, PGM and PST buttons
 for i in range (PGM_Buttons):
     KEY_button[i] = Button(root,font=PushButtonFont,text=i,borderless="true",fg=PGM_FG,bg=PGM_GLOW,height=50,width=50,command=lambda Current_KEY_Button=i: KEY_ButtonPress(Current_KEY_Button))
     KEY_button[i].place(x = PGM_Left + i * PGM_x_Spacing, y = PGM_Top)
@@ -198,12 +223,14 @@ for i in range (PGM_Buttons):
     PST_button[i] = Button(root,font=PushButtonFont,text=i, borderless="true", fg=PGM_FG,bg=PGM_GLOW,height=50,width=50,command=lambda Current_PST_Button=i: PST_ButtonPress(Current_PST_Button))
     PST_button[i].place(x = PGM_Left + i * PGM_x_Spacing, y = 340)
 
+# Draw the Memory buttons. Special case for the R State button.
 for i in range (MEM_Buttons):
     MEM_button[i] = Button(root,font=MemoryButtonFont,text=i+1,borderless="true",fg=PGM_FG,bg=PGM_GLOW,height=50,width=50,command=lambda memoryButton=i: MEM_ButtonPress(memoryButton))
     if i == 8:
         MEM_button[i].configure(text = 'R State', font=ButtonFont, height=50, width=80)
-    MEM_button[i].place(x = MEM_Left + i * PGM_x_Spacing, y = MEM_Top + PGM_y_Spacing * 0)
+    MEM_button[i].place(x = MEM_Left + i * PGM_x_Spacing, y = MEM_Top)
 
+# Draw the Recall, Store and Save Mem buttons
 storeRecallButton[0] = Button(root,font=ButtonFont,text="RECALL",borderless="true",fg=PGM_FG,bg=PGM_GLOW,height=40,width=90,command=lambda Current_SR_Button=0: SR_ButtonPress(Current_SR_Button))
 storeRecallButton[0].place(x = 585, y = 30)
 
@@ -213,18 +240,21 @@ storeRecallButton[1].place(x = 585, y = 30 + 50)
 storeRecallButton[2] = Button(root,font=ButtonFont,text="SAVE MEM",borderless="true",fg=PGM_FG,bg="red",height=0,width=0,command=lambda Current_SR_Button=2: SR_ButtonPress(Current_SR_Button))
 storeRecallButton[2].place(x = 575, y = 30 + 100)
 
+# Draw the PGM and Effects Dissolve memory recall type buttons.
 programEffectButton[0] = Button(root,font=ButtonFont,text="PGM",borderless="true",fg=PGM_FG,bg=PGM_GLOW,height=40,width=90,command=lambda Current_PE_Button=0: PE_ButtonPress(Current_PE_Button))
 programEffectButton[0].place(x = 685+20, y = 30)
 
 programEffectButton[1] = Button(root,font=ButtonFont,text="EFF DIS",borderless="true",fg=PGM_FG,bg=PGM_GLOW,height=40,width=90,command=lambda Current_PE_Button=1: PE_ButtonPress(Current_PE_Button))
 programEffectButton[1].place(x = 785+10, y = 30)
 
+# Draw Cut an Auto.
 CUT_button = Button(root, font=ButtonFont, text="CUT" ,borderless="true", fg=PGM_FG, bg=PGM_GLOW, height=50, width=70, command= lambda :CUT_ButtonPress())
 CUT_button.place(x = 680, y = 340)
 
 AUTO_button = Button(root, font=ButtonFont, text="AUTO" ,borderless="true", fg=PGM_FG, bg=PGM_GLOW, height=50, width=70, command=lambda :AUTO_ButtonPress())
 AUTO_button.place(x = 760, y = 340)
 
+# Draw Dissolve, Wipe and DVE transition type buttons.
 transTypeButton[0] = Button(root, font=ButtonFont, text="DISS" ,borderless="true", fg=PGM_FG, bg=PGM_GLOW, height=50, width=70, command=lambda Current_TransType=0: TransTypePress(Current_TransType))
 transTypeButton[0].place(x = 680, y = 280)
 
@@ -234,16 +264,19 @@ transTypeButton[1].place(x = 760, y = 280)
 transTypeButton[2] = Button(root, font=ButtonFont, text="DVE" ,borderless="true", fg=PGM_FG, bg=PGM_GLOW, height=50, width=70, command=lambda Current_TransType=2: TransTypePress(Current_TransType))
 transTypeButton[2].place(x = 840, y = 280)
 
+# Draw Background and Key next transition buttons.
 transInclButton[0] = Button(root, font=ButtonFont, text="BKGD" ,borderless="true", fg=PGM_FG, bg=PGM_GLOW, height=50, width=70, command=lambda TransIncl=0: TransInclPress(TransIncl))
 transInclButton[0].place(x = 680, y = 220)
 
 transInclButton[1] = Button(root, font=ButtonFont, text="KEY" ,borderless="true", fg=PGM_FG, bg=PGM_GLOW, height=50, width=70, command=lambda TransIncl=1: TransInclPress(TransIncl))
 transInclButton[1].place(x = 760, y = 220)
 
-panelMenuText = Marquee(root, font=panelMenuFont,height=100,width=240,fg="#3F3", bg="#33F")
+# Draw the Panel Menu text box.
+panelMenuText = Marquee(root, font=panelMenuFont,height=100,width=240,fg=Menu_FG, bg=Menu_BG)
 panelMenuText.place(x = 730-25, y = 50+40)
 panelMenuText.stop(True)
 
+# Draw the Panel Menu Up/Down/Left/Right buttons.
 # Up
 panelMenuButton[0] = Button(root, font=panelButtonFont, text="\u23F6" ,borderless="true", fg=PGM_FG, bg=PGM_GLOW, height=30, width=30, command=lambda panelButton=1: panelButtonPress(panelButton))
 panelMenuButton[0].place(x = 765-25, y = 110+30)
@@ -274,7 +307,7 @@ panelMenuButton[4].place(x = 910-25, y = 110+30)
 panelMenuButton[5] = Button(root, font=panelButtonFont, text="\u23F7" ,borderless="true", fg=PGM_FG, bg=PGM_GLOW, height=30, width=30, command=lambda panelButton=6: panelButtonPress(panelButton))
 panelMenuButton[5].place(x = 910-25, y = 140+30)
 
-
+# Draw the Key, Mnemonics, PGM, PST and memories labels.
 KEY_Label = tk.Label(root,text="KEY",font=ButtonFont, fg=LBL_FG, bg=LBL_BG) 
 KEY_Label.place(x = PGM_Left + PGM_x_Spacing * PGM_Buttons-5, y = PGM_Top + 13)
 
@@ -283,7 +316,7 @@ for i in range (PGM_Buttons):
     MNM_label[i] = tk.Label(root,font=Mnemonic_Font,bd= 2,text=Mnemonics[i],fg=MNM_FG,bg=LBL_BG,height=1,width=6)
     MNM_label[i].place(x = PGM_Left + i * PGM_x_Spacing, y = PGM_Top + 55)
 
-PGM_Label = tk.Label(root,text="PGM",font=ButtonFont, fg=LBL_FG, bg=LBL_BG) 
+PGM_Label = tk.Label(root,text="BKGD",font=ButtonFont, fg=LBL_FG, bg=LBL_BG) 
 PGM_Label.place(x = PGM_Left + PGM_x_Spacing * PGM_Buttons-5, y = PGM_Top + 13 + 80)
 
 PST_Label = tk.Label(root,text="PST",font=ButtonFont, fg=LBL_FG, bg=LBL_BG) 
@@ -292,16 +325,9 @@ PST_Label.place(x = PGM_Left + PGM_x_Spacing * PGM_Buttons-5, y = 353)
 MEM_Label = tk.Label(root,text="MEMORIES",font=ButtonFont, fg=LBL_FG, bg=LBL_BG) 
 MEM_Label.place(x = 300, y = 15)
 
-def Close_App():
-    print( "Closing switcher")
-    tn.close
-    tn_PRV.close
-    root.destroy()
-    quit()
 
-root.protocol("WM_DELETE_WINDOW", Close_App)
-
-
+# Do this when the Self, CK or DVE buttons are pressed.
+# Self and Chroma Keys are not in yet. If anyone asks, I might do it.
 def KeyTypePress(Current_KeyType):
     global DVEKeySize
     global Current_DVEKeySize
@@ -332,7 +358,7 @@ def KeyTypePress(Current_KeyType):
         panelButtonPress(0)
     pass
 
-
+# Someone pressed a button on the key row.
 def KEY_ButtonPress(Button):
     global Current_KEY_Button
     global KEY_button
@@ -343,6 +369,7 @@ def KEY_ButtonPress(Button):
     setButton(KEY_button,Current_KEY_Button,Current_KeyTally)
     pass
 
+# Change the background color on the Key, Bkgd or PST row.
 def setButton(buttonRow,button,tally):
     for i in range (PGM_Buttons):
         if i==button:
@@ -351,7 +378,7 @@ def setButton(buttonRow,button,tally):
                 print("red " + str(button))
             else:
                 if buttonRow == PST_button:
-                    buttonRow[i].config(bg="green")
+                    buttonRow[i].config(bg='green')
                     print("green " + str(button))
                 else:
                     buttonRow[i].config(bg=SELECT_BUTTON_BG)
@@ -384,7 +411,9 @@ def PST_ButtonPress(button):
     
     pass
 
-
+# Recall or store a memory
+# This creates and uses a Switcher_Settings.csv file in the same folder as this script.
+# If you're wondering about all the globals, AFAIK I don't need them, but it won't run without them.
 def MEM_ButtonPress(memoryButton):
     global memories
     global Current_Recall_Button
@@ -483,9 +512,6 @@ def MEM_ButtonPress(memoryButton):
             Current_DVEKeySize = memories[Current_Recall_Button][14]
             Current_DVEKeyPersp = memories[Current_Recall_Button][15]
             
-            #Current_PE_Button = memories[Current_Recall_Button][16]
-            #PE_ButtonPress(Current_PE_Button)
-
             SendDVESettings(1)
 
             panelButtonPress(0) #Refresh display
@@ -515,7 +541,8 @@ def MEM_ButtonPress(memoryButton):
     
     pass
 
-
+# Set up Memory Store mode.
+# If the Save Mem button is pressed, then save the memory to Switcher_Settings.csv
 def SR_ButtonPress(SR_Button):
     global Current_Recall_Button
     global Current_Store_Button
@@ -582,7 +609,7 @@ def SR_ButtonPress(SR_Button):
 
     pass
 
-
+# Deal with Program or Effects Dissolve being pressed.
 def PE_ButtonPress(PE_Button):
     global Current_PE_Button
     global programEffectButton
@@ -597,6 +624,7 @@ def PE_ButtonPress(PE_Button):
         programEffectButton[1].config(bg=SELECT_BUTTON_BG)
 
 
+# Do a Dissolve Wipe or DVE effect.
 def AUTO_ButtonPress():
     print("--------------------------MEAUTO")
     global Current_KEY_Button
@@ -608,7 +636,6 @@ def AUTO_ButtonPress():
     global Current_TransType
     global Current_DVE
     global Current_Wipe
-    global panelRate
 
     send("TRANSINCL:" + str(Current_TransIncl))
 
@@ -646,7 +673,7 @@ def AUTO_ButtonPress():
 
     pass
 
-
+# Do a simple cut.
 def CUT_ButtonPress():
     print("--------------------------MECUT")
     global Current_KEY_Button
@@ -685,14 +712,10 @@ def CUT_ButtonPress():
 
     pass
 
-
+# Changes Current_TransType (DISS, WIPE, DVE)
 def TransTypePress(TransType):
     global Current_TransType
-    global TransRate
-    global Current_TransRate
-    global panelMenuText
-    global lastButtonPressed
-
+    
     Current_TransType = TransType
     lastButtonPressed = TransType
     panelButtonPress(0) # set the panel menu
@@ -704,7 +727,7 @@ def TransTypePress(TransType):
         
     pass
 
-
+# Changes Next Transition Include (BKGD, KEY)
 def TransInclPress(TransIncl):
     global Current_TransIncl
     global Current_TransBkgd
@@ -733,7 +756,7 @@ def TransInclPress(TransIncl):
     setPRV()
     pass
 
-
+# Some one pressed the up/down left/right buttons for the Panel Menu
 def panelButtonPress(panelMenuButton):
     global Current_TransType
     global TransRate
@@ -744,10 +767,8 @@ def panelButtonPress(panelMenuButton):
     global DVEPattern
     global panelMenuText
     global lastButtonPressed
-    #global Current_DVEKeyPos
     global Current_DVEKeySize
     global Current_DVEKeyPersp
-    #global DVEKeyPos
     global DVEKeySize
     global DVEKeyPersp
     global DVEXPOS
@@ -827,7 +848,7 @@ def panelButtonPress(panelMenuButton):
             if DVEXPOS > 160:
                 DVEXPOS = 160
 
-        if panelMenuButton == 3: #                 Size
+        if panelMenuButton == 3: #    Size
             Current_DVEKeySize = Current_DVEKeySize + 1
             if Current_DVEKeySize > 10:
                 Current_DVEKeySize = 10
@@ -837,7 +858,7 @@ def panelButtonPress(panelMenuButton):
             if Current_DVEKeySize < 1:
                 Current_DVEKeySize = 1
 
-        if panelMenuButton == 5: #                  Persp
+        if panelMenuButton == 5: #     Persp
             Current_DVEKeyPersp = Current_DVEKeyPersp + 1
             if Current_DVEKeyPersp > 5:
                 Current_DVEKeyPersp = 5
@@ -857,13 +878,14 @@ def panelButtonPress(panelMenuButton):
         else:
             xy = xy + " 0    "
 
+        #Diusplay the DVE text on the Marquee Widget
         temp = '  x:  y:  Size: Persp:\n' \
             + xy \
             + DVEKeySize[0][Current_DVEKeySize] \
             + DVEKeyPersp[0][Current_DVEKeyPersp]
         panelMenuText.config(text=temp)
 
-        # if Current_KeyTally == 1:
+        # Send the new DVE settings to PGM and PV M5StickCs
         SendDVESettings(0)
         send("TRANSINCL:2")
         send("MECUT:0")
@@ -875,6 +897,7 @@ def panelButtonPress(panelMenuButton):
     pass
 
 
+# Send DVE Settings. recallType 1= Normal, 2= Effects Dissolve, 3= Send normal to Preview.
 def SendDVESettings(recallType):
     print("--------------------------SendDVESettings")
     global DVEKeySize
@@ -901,14 +924,15 @@ def SendDVESettings(recallType):
         send("Mem_DVEPERSP:" + str(DVEKeyPersp[0][Current_DVEKeyPersp]))
 
     if recallType == 2: 
-        sendPRV("DVESIZE:" + str(DVESIZE)) # Manual Recall
+        sendPRV("DVESIZE:" + str(DVESIZE)) # Manual Recall to preview 
         sendPRV("DVEXPOS:" + str(int(DVEXPOS)))
         sendPRV("DVEYPOS:" + str(int(DVEYPOS)))
         sendPRV("DVEPERSP:" + str(DVEKeyPersp[0][Current_DVEKeyPersp]))
 
     pass
 
-
+# Reset all buttons and settings. It also loads the memories from Switcher_Settings.csv
+# It creates a default Switcher_Settings.csv if it does not exist.
 def rState():
     print("--------------------------R State")
     global Current_TransType
@@ -938,26 +962,40 @@ def rState():
     global panelMenuText
     global switcherVersion
     
+    # Create Switcher_Settings.csv if it does not exist.
+    F = open('Switcher_Settings.csv','at')
+    F.close()
+
     F = open('Switcher_Settings.csv','rt')
     temp = F.read()
-    valueStart = 0
-    
-    for i in range(10):                    # Recall memories 
-        for j in range(20):
-            if valueStart != 0:
-                valueStart = temp.find(',',valueStart)
-                if valueStart >= 0:
-                    valueEnd = temp.find(',',valueStart+1)
-                    memories[i][j] = int(temp[valueStart+1:valueEnd])
-                    valueStart = valueEnd
-                else:
-                    print('End of file')
-                    break
-            else:
-                memories[i][j] = int(temp[0:1])
-                valueStart = 1
     F.close()
-    
+    if (len(temp) > 1 ):             #load memories into the memories[][] list.
+        print("------Reading 'Switcher_Settings.csv'")
+        valueStart = 0
+        
+        for i in range(10):
+            for j in range(20):
+                if valueStart != 0:
+                    valueStart = temp.find(',',valueStart)
+                    if valueStart >= 0:
+                        valueEnd = temp.find(',',valueStart+1)
+                        memories[i][j] = int(temp[valueStart+1:valueEnd])
+                        valueStart = valueEnd
+                    else:
+                        print('End of file')
+                        break
+                else:
+                    memories[i][j] = int(temp[0:1])
+                    valueStart = 1
+        
+    else: #                                         Create Switcher_Settings.csv
+        F = open('Switcher_Settings.csv','wt')
+        print("------Writing 'Switcher_Settings.csv'")
+        for i in range(200):
+           F.write('0,')
+        F.close() 
+
+
     keyTypeButton[2].config(bg=SELECT_BUTTON_BG)
     Current_KeyTally = 0
     send("KEYTALLY:0")
@@ -971,7 +1009,7 @@ def rState():
     Current_PGM_Button = 0
     send("BKGD:0")
     sendPRV("BKGD:0")
-    setButton(PGM_button,0,0)
+    setButton(PGM_button,0,1)
 
     Current_PST_Button = 0
     send("PST:0")
@@ -1021,6 +1059,7 @@ def rState():
     
     pass
     
+# Run this when the program is opened.    
 rState()
 
 root.mainloop()
